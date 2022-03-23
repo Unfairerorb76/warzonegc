@@ -1,27 +1,80 @@
-// Select the node that will be observed for mutations
-const targetNode = document.getElementById('UjsContainer');
+// ==UserScript==
+// @name         Testing Global Chat to Discord
+// @namespace    http://tampermonkey.net/
+// @version      0.0
+// @description  Sends all messages in global chat to Discord
+// @author       JK_3
+// @match        https://www.warzone.com/MultiPlayer?ChatRoom=1
+// @grant        none
+// ==/UserScript==
 
-// Options for the observer (which mutations to observe)
-const config = { attributes: true, childList: true, subtree: true };
+(function() {
+    'use strict';
 
-// Callback function to execute when mutations are observed
-const callback = function(mutationsList, observer) {
-    // Use traditional 'for loops' for IE 11
-    for(const mutation of mutationsList) {
-        if (mutation.type === 'childList') {
-            console.log('A child node has been added or removed.');
-        }
-        else if (mutation.type === 'attributes') {
-            console.log('The ' + mutation.attributeName + ' attribute was modified.');
+// ------------ Global variables --------------------------------------------------------------------------------------------------------------------
+    let previousGlobalUser;
+    let previousGlobalMessage;
+    const config = { attributes: true, childList: true, subtree: true };
+
+// -------------- Send to Discord -------------------------------------------------------------------------------------------------------------------------------
+    function postToDiscord(msg,name="ChatBot"){
+        const webhookURL = "https://discord.com/api/webhooks/956171107419951146/DA-qH_ko7ZF4XJ9_kZqBdnDerExUlm_3Ab4J7DGmHkwK2kUM37oaMD26rU4PZFT2nGSq"
+        let data = {
+            content: msg,
+            username: name,
+            allowed_mentions: {parse:[]} //dont allow any mention to be created from chat, this prevents spam and annoying pings
+        };
+
+        fetch(webhookURL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+       }).then(res=>{console.log(res);});
+   }
+
+// --------------- Chat checker -----------------------------------------------------------------------------------------------------------------------------
+    function globalChatChecker(mutationsList, globalChatObserver){
+        const globalChat = document.getElementById("ujs_ChatContainer");
+        let numberOfMessages = globalChat.children.length;
+        let user = globalChat.children[numberOfMessages-1].children[0].children[1].children[0].innerText;
+        let message = globalChat.children[numberOfMessages-1].children[1].children[1].children[0].innerText;
+        if(user != previousGlobalUser || message != previousGlobalMessage){
+            previousGlobalUser = user;
+            previousGlobalMessage = message;
+            postToDiscord(message,user);
         }
     }
-};
 
-// Create an observer instance linked to the callback function
-const observer = new MutationObserver(callback);
+// -------------- initialize the chat checker --------------------------------------------------------------
+    function initAndStart(){
+        const initInterval = setInterval(function(){
+            if(document.getElementById("ujs_GlobalChatTab_btn")){
+                const clanChatScroller = document.getElementById("ujs_Viewport_2");
+                clanChatScroller.scrollTop = clanChatScroller.scrollHeight - clanChatScroller.clientHeight + 1;
+                document.getElementById("ujs_GlobalChatTab_btn").click();
+                clearInterval(initInterval);//stops checking for the object
+                const globalChat = document.getElementById("ujs_ChatContainer");
+                const startObserver = new MutationObserver(startFeatures);
+                startObserver.observe(globalChat, config);
+            }
+        },100);
+    }
 
-// Start observing the target node for configured mutations
-observer.observe(targetNode, config);
 
-// Later, you can stop observing
-observer.disconnect();
+    function startFeatures(mutationsList, startObserver) {
+        document.getElementById("ujs_ClanChatTab_btn").click();
+        this.disconnect();
+        start();
+    }
+
+        function start(){
+            const globalChat = document.getElementById("ujs_ChatContainer");
+            const globalChatObserver = new MutationObserver(globalChatChecker);
+            previousGlobalUser = globalChat.children[globalChat.children.length-1].children[0].children[1].children[0].innerText;
+            previousGlobalMessage = globalChat.children[globalChat.children.length-1].children[1].children[1].children[0].innerText;
+            globalChatObserver.observe(globalChat, config);
+        }
+
+    initAndStart();
+
+})();
